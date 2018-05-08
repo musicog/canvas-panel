@@ -1,4 +1,5 @@
 import React, { Component } from 'react';
+import TWEEN from '@tweenjs/tween.js';
 import {
   Manifest,
   CanvasProvider,
@@ -55,6 +56,7 @@ class Container extends Component {
     this.scheduledAnimationFrame = false;
     // Double tilde quicker than Math.floor, useful for scroll events.
     const current = ~~(this.lastScrollY / this.props.windowHeight);
+    this.props.updateIndividual(this.lastScrollY / this.props.windowHeight);
     if (current !== this.state.current) {
       this.setState(() => ({
         current,
@@ -102,8 +104,67 @@ class AnnotationListView extends Component {
   };
 
   componentWillMount() {
+    this.props.setUpdater(this.update);
     this.updateView(this.props);
+    const newProps = this.props;
+
+    this.tween = this.props.annotations
+      .reduce(
+        ({ prev, list = [] }, next) => {
+          return {
+            prev: next.on.selector,
+            list: [...list, { a: prev, b: next.on.selector }],
+          };
+        },
+        { prev: { x: 0, y: 0 } }
+      )
+      .list.map((paths, i) => {
+        return new TWEEN.Tween({
+          x: paths.a.x,
+          y: paths.a.y,
+          height: paths.a.height || newProps.height,
+          width: paths.a.width || newProps.width,
+        })
+          .to(
+            {
+              x: paths.b.x,
+              y: paths.b.y,
+              height: paths.b.height,
+              width: paths.b.width,
+            },
+            1000
+          )
+          .onComplete(function() {
+            this.start();
+          })
+          .delay(i * 1000)
+          .easing(TWEEN.Easing.Quintic.Out)
+          .onUpdate(function() {
+            console.log('update');
+            const { x, y, width, height } = this._object;
+            newProps.viewport.goToRect(
+              { x, y, width, height },
+              newProps.animationFramePadding,
+              1
+            );
+          })
+          .start();
+      });
+    // .reduce(({ tweenA: tweenB, firstTween }, tweenA) => {
+    //   if (tweenB) {
+    //     tweenB.chain(tweenA);
+    //   }
+    //   return { tweenA, firstTween: firstTween ? firstTween : tweenA };
+    // }, {});
+
+    // this.tween.tweenA.chain(this.tween.firstTween);
+    // this.tween.firstTween.start();
   }
+
+  update = n => {
+    TWEEN.update(n * 1000);
+    console.log('updaing', n * 1000);
+  };
 
   componentWillReceiveProps(newProps) {
     if (newProps.viewport && newProps.current !== this.props.current) {
@@ -119,11 +180,11 @@ class AnnotationListView extends Component {
 
     if (newProps.annotations[newProps.current - newProps.offset]) {
       const on = newProps.annotations[newProps.current - newProps.offset].on;
-      newProps.viewport.goToRect(
-        on.selector,
-        this.props.animationFramePadding,
-        this.props.animationSpeed
-      );
+      // newProps.viewport.goToRect(
+      //   on.selector,
+      //   this.props.animationFramePadding,
+      //   this.props.animationSpeed
+      // );
     }
   }
 
@@ -145,6 +206,16 @@ class FullPagePatchwork extends Component {
     this.setState({ viewport });
   };
 
+  updateIndividual = n => {
+    if (this.updater) {
+      this.updater(n);
+    }
+  };
+
+  setUpdater = updater => {
+    this.updater = updater;
+  };
+
   render() {
     return (
       <div>
@@ -159,7 +230,7 @@ class FullPagePatchwork extends Component {
                 />
               </SingleTileSource>
             </FullPageViewport>
-            <Container>
+            <Container updateIndividual={this.updateIndividual}>
               <TitlePanel>
                 <h1>Ocean Liners</h1>
                 <p>scroll demo</p>
@@ -170,6 +241,7 @@ class FullPagePatchwork extends Component {
               <AnnotationListProvider>
                 <AnnotationProvider>
                   <AnnotationListView
+                    setUpdater={this.setUpdater}
                     offset={1}
                     viewport={this.state.viewport}
                   />
