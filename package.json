@@ -1,6 +1,7 @@
 {
   "private": true,
   "name": "canvas-panel",
+  "version": "0.0.1-DW",
   "workspaces": ["packages/*"],
   "devDependencies": {
     "@fesk/module-release": "0.0.2",
